@@ -1,0 +1,25 @@
+= To install
+
+* `mvn install` 
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_X/standalone/deployments/`
+
+= To set containers
+
+We need three containers
+
+* `export JBOSS_HOME_1=$PWD/jboss-eap-7.0-1`
+* `export JBOSS_HOME_2=$PWD/jboss-eap-7.0-2`
+* `export JBOSS_HOME_3=$PWD/jboss-eap-7.0-3`
+
+Define application user settings for remote call being accepted
+
+* `echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME_1/standalone/configuration/application-users.properties`
+* `echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME_2/standalone/configuration/application-users.properties`
+* `echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME_3/standalone/configuration/application-users.properties`
+
+Run each of them with different settings (run on jdk8)
+
+
+* `$JBOSS_HOME_1/bin/standalone.sh`
+* `$JBOSS_HOME_2/bin/standalone.sh -Djboss.socket.binding.port-offset=100`
+* `$JBOSS_HOME_3/bin/standalone.sh -Djboss.socket.binding.port-offset=200`
