@@ -36,8 +36,8 @@ public class EjbBean implements EjbRemote {
 			throw new RuntimeException(e);
 		}
 
-		EjbCallUtils.lookup("ejb-call-ear" + EjbCallUtils.PROJECT_VERSION, "ejb-call-jar" + EjbCallUtils.PROJECT_VERSION,
-				EjbBean.class, EjbRemote.class);
+		EjbRemote remoteBean = EjbCallUtils.lookup("ejb-call-ear", "ejb-call-war-1.0.0-SNAPSHOT", EjbBean.class, EjbRemote.class);
+		remoteBean.callNext();
 		System.out.println("GOOD");
 	}
 }

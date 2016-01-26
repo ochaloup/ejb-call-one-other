@@ -10,12 +10,11 @@ public final class EjbCallUtils {
 		// can't be intialized
 	}
 
-	public static final String PROJECT_VERSION = "-1.0.0-SNAPSHOT";
-
 	public static final String HOST = System.getProperty("call.host", "localhost");
 	public static final int PORT = Integer.parseInt(System.getProperty("call.port", "8080"));
-	public static final String SECURITY_USERNAME = System.getProperty("call.username", "guest");
-	public static final String SECURITY_PASSWORD = System.getProperty("call.password", "guest");
+	// echo 'user=c5568adea472163dfc00c19c6348a665' >> standalone/configuration/application-users.properties
+	public static final String SECURITY_USERNAME = System.getProperty("call.username", "user");
+	public static final String SECURITY_PASSWORD = System.getProperty("call.password", "user");
 
 	public static final <T> T lookup(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
 		Properties props = new Properties();
@@ -27,17 +26,18 @@ public final class EjbCallUtils {
 		// to avoid: java.lang.IllegalStateException: EJBCLIENT000025: No EJB receiver available
 		props.put("jboss.naming.client.ejb.context", true);
 
-		String beanLookup = null;
+		String beanLookup = "ejb:" + earName + "/" + jarName + "/" + beanClass.getSimpleName() + "!" + remoteClass.getName();
+		String lookupInfo = String.format("bean by lookup '%s' to '%s:%s' with credentials '%s/%s'",
+				beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
+
 		Context context = null;
 		try {
 			context = new InitialContext(props);
-			beanLookup = "ejb:" + earName + "/" + jarName + "/" + beanClass.getSimpleName() + "!" + remoteClass.getName();
+			System.out.println("Looking at: " + lookupInfo);
 	        // (isStateful ? "?stateful" : "");
 			return remoteClass.cast(context.lookup(beanLookup));
 		} catch (Exception e) {
-			String err = String.format("Can't lookup for bean by lookup '%s' to '%s:%s' with credentials '%s/%s'",
-					beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
-			throw new RuntimeException(err, e);
+			throw new RuntimeException("Can't get: " + lookupInfo, e);
 		} finally {
 			if (context != null) {
 				try {
