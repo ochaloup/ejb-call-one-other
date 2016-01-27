@@ -1,7 +1,6 @@
 = To install
 
-* `mvn install` 
-* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_X/standalone/deployments/`
+* `mvn install`
 
 = To set containers
 
@@ -13,13 +12,25 @@ We need three containers
 
 Define application user settings for remote call being accepted
 
-* `echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME_1/standalone/configuration/application-users.properties`
-* `echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME_2/standalone/configuration/application-users.properties`
-* `echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME_3/standalone/configuration/application-users.properties`
+```
+for I in `seq 1 3`; do
+  JBOSS_HOME=`echo JBOSS_HOME_$I`
+  JBOSS_HOME=$( eval "echo \$$JBOSS_HOME" )
+  echo 'user=c5568adea472163dfc00c19c6348a665' >> $JBOSS_HOME/standalone/configuration/application-users.properties
+  sed -i "s#</extensions>#</extensions>\n    <system-properties><property name=\"call.port\" value=\"8${I}80\"/></system-properties>#" \
+    $JBOSS_HOME/standalone/configuration/standalone.xml
+    sed -i "s#<core-environment>#<core-environment node-identifier=\"${I}\">#" $JBOSS_HOME/standalone/configuration/standalone.xml
+done
+```
 
 Run each of them with different settings (run on jdk8)
-
 
 * `$JBOSS_HOME_1/bin/standalone.sh`
 * `$JBOSS_HOME_2/bin/standalone.sh -Djboss.socket.binding.port-offset=100`
 * `$JBOSS_HOME_3/bin/standalone.sh -Djboss.socket.binding.port-offset=200`
+
+= To deploy
+
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_1/standalone/deployments/`
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_2/standalone/deployments/`
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_3/standalone/deployments/`
