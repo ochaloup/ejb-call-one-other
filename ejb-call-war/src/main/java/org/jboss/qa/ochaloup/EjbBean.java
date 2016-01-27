@@ -17,7 +17,7 @@ public class EjbBean implements EjbRemote {
     protected TransactionManager txn;
 
 	@Override
-	public void callNext(boolean isCallNext) {
+	public void callNext() {
 		System.out.println("--------------------------> START");
 
 		TestXAResource xAResource1 = new TestXAResource();
@@ -36,9 +36,9 @@ public class EjbBean implements EjbRemote {
 			throw new RuntimeException(e);
 		}
 
-		if(isCallNext) {
-			EjbRemote remoteBean = EjbCallUtils.lookup("ejb-call-ear", "ejb-call-war-1.0.0-SNAPSHOT", EjbBean.class, EjbRemote.class);
-			remoteBean.callNext((EjbCallUtils.PORT == null ? false : true));
+		if(EjbCallUtils.PORT != null) {
+			EjbRemote remoteBean = EjbCallUtils.lookupEjbClient(EjbCallUtils.PORT, "ejb-call-war-1.0.0-SNAPSHOT", EjbBean.class, EjbRemote.class);
+			remoteBean.callNext();
 		}
 
 		System.out.println("--------------------------> DONE");

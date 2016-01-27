@@ -2,13 +2,13 @@
 
 * `mvn install`
 
-= To set containers
+== To set containers
 
 We need three containers
 
-* `export JBOSS_HOME_1=$PWD/jboss-eap-7.0-1`
-* `export JBOSS_HOME_2=$PWD/jboss-eap-7.0-2`
-* `export JBOSS_HOME_3=$PWD/jboss-eap-7.0-3`
+* `export JBOSS_HOME_1=$PWD/jboss-eap-7.0.0.ER3-1`
+* `export JBOSS_HOME_2=$PWD/jboss-eap-7.0.0.ER3-2`
+* `export JBOSS_HOME_3=$PWD/jboss-eap-7.0.0.ER3-3`
 
 Define application user settings for remote call being accepted
 
@@ -23,14 +23,69 @@ for I in `seq 1 3`; do
 done
 ```
 
+. Then remove property `call.port` from `$JBOSS_HOME_3/standalone/configuration/standalone.xml`.
+. If you want set logging of `com.arjuna` to `TRACE`. Useful really for `$JBOSS_HOME_2`
+
 Run each of them with different settings (run on jdk8)
 
-* `$JBOSS_HOME_1/bin/standalone.sh`
-* `$JBOSS_HOME_2/bin/standalone.sh -Djboss.socket.binding.port-offset=100`
-* `$JBOSS_HOME_3/bin/standalone.sh -Djboss.socket.binding.port-offset=200`
+* `$JBOSS_HOME_1/bin/standalone.sh -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45`
+* `$JBOSS_HOME_2/bin/standalone.sh -Djboss.socket.binding.port-offset=100 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45`
+* `$JBOSS_HOME_3/bin/standalone.sh -Djboss.socket.binding.port-offset=200 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45`
 
-= To deploy
+Could be useful to decrease interval of orphan safety interval
+ (see _ArjunaJTA/jta/classes/com/arjuna/ats/jta/common/JTAEnvironmentBean.java_,
+  default value for orphanSafetyInterval is 20000). Server settings shoul be
+ `-Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`
 
-* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_1/standalone/deployments/`
-* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_2/standalone/deployments/`
-* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_3/standalone/deployments/`
+
+== To deploy
+
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_1/standalone/deployments/8080.ear`
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_2/standalone/deployments/8180.ear`
+* `cp ejb-call-ear/target/ejb-call-ear.ear $JBOSS_HOME_3/standalone/deployments/8280.ear`
+
+== To instrument
+
+We will use byteman to instrument server crash. Add following to the end of the
+`$JBOSS_HOME_2/bin/standalone.conf` file.
+
+```
+JAVA_OPTS="-javaagent:/opt/byteman-download-3.0.3/lib/byteman.jar=script:/home/ochaloup/tmp/byteman.btm -Djboss.modules.system.pkgs=org.jboss.byteman ${JAVA_OPTS}"
+```
+
+Now the byteman script is needed to be created at location `/home/ochaloup/tmp/byteman.btm`
+
+[source, byteman]
+```
+# only a 'check' rule for we can see byteman is configured right
+RULE say I am here
+CLASS org.jboss.modules.Main
+METHOD main
+AT ENTRY
+IF TRUE
+DO
+  System.out.println("Byteman is here");
+ENDRULE
+
+RULE crash on commit of testxa resource
+CLASS org.jboss.qa.ochaloup.xa.TestXAResource
+METHOD commit
+AT ENTRY
+IF true
+DO
+  System.out.println("Killing JVM"); killJVM();
+ENDRULE
+
+RULE crash on commit of basicaction
+CLASS BasicAction
+METHOD doCommit
+AT ENTRY
+IF true
+DO
+  debug("killing JVM: BasicAction"), killJVM()
+ENDRULE
+```
+
+== To run
+
+Got to: http://localhost:8080/ejb-call-war and check the servers log output.

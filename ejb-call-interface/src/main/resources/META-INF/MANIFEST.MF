@@ -1,1 +1,1 @@
-Dependencies: org.jboss.jts,org.jboss.jboss-transaction-spi
+Dependencies: org.jboss.jts,org.jboss.jboss-transaction-spi, org.jboss.ejb-client

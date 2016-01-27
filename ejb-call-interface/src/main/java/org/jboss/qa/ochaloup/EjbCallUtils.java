@@ -5,6 +5,11 @@ import java.util.Properties;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 
+import org.jboss.ejb.client.EJBClientConfiguration;
+import org.jboss.ejb.client.EJBClientContext;
+import org.jboss.ejb.client.PropertiesBasedEJBClientConfiguration;
+import org.jboss.ejb.client.remoting.ConfigBasedEJBClientContextSelector;
+
 public final class EjbCallUtils {
 	private EjbCallUtils() {
 		// can't be intialized
@@ -16,9 +21,14 @@ public final class EjbCallUtils {
 	public static final String SECURITY_USERNAME = System.getProperty("call.username", "user");
 	public static final String SECURITY_PASSWORD = System.getProperty("call.password", "user");
 
-	public static final <T> T lookup(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
+	/**
+	 * <p>
+	 * Remote naming
+	 * <p>
+	 * Strangely seems not working... ?
+	 */
+	public static final <T> T lookupRemoteNaming(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
 		Properties props = new Properties();
-		// props.put(Context.URL_PKG_PREFIXES, "org.jboss.ejb.client.naming");
 		props.put(Context.PROVIDER_URL, "http-remoting://" + HOST + ":" + PORT);
 		props.put(Context.INITIAL_CONTEXT_FACTORY, "org.jboss.naming.remote.client.InitialContextFactory");
 		props.put(Context.SECURITY_PRINCIPAL, SECURITY_USERNAME);
@@ -26,33 +36,54 @@ public final class EjbCallUtils {
 		// to avoid: java.lang.IllegalStateException: EJBCLIENT000025: No EJB receiver available
 		props.put("jboss.naming.client.ejb.context", true);
 
-		String beanLookup = "ejb:" + earName + "/" + jarName + "/" + beanClass.getSimpleName() + "!" + remoteClass.getName();
+		String beanLookup = getRemoteNamingLookupString(earName, jarName, beanClass, remoteClass);
 		String lookupInfo = String.format("bean by lookup '%s' to '%s:%s' with credentials '%s/%s'",
 				beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
 
-		Context context = null;
-		try {
-			context = new InitialContext(props);
-			System.out.println("Looking at: " + lookupInfo);
-			Thread.sleep(3 * 1000);
-	        // (isStateful ? "?stateful" : "");
-			return remoteClass.cast(context.lookup(beanLookup));
-		} catch (Exception e) {
-			throw new RuntimeException("Can't get: " + lookupInfo, e);
-		} finally {
-			if (context != null) {
-				try {
-					context.close();
-				} catch (Exception e) {
-					// ignore
-				}
-			}
-		}
+		System.out.println("Looking at: " + lookupInfo);
+		return doLookup(beanLookup, remoteClass, props);
 	}
 
 	/**
-	 * Using the proprietary JBoss EJB Client API.
+	 * <p>
+	 * EJB client<br>
+	 * <p>
+	 * From:<br>
+	 * http://git.app.eng.bos.redhat.com/git/jbossqe/eap-tests-ejb.git/tree/ejb-client-qa-tests/src/test/java/org/jboss/qa/ejbclient/jndi/InitialContextDirectoryScoped.java
+	 */
+	public static final <T> T lookupEjbClient(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
+        System.setProperty("org.jboss.ejb.client.view.annotation.scan.enabled", "true");  // without this, CompressionHint for requests won't work
+        Properties env = new Properties();
+        env.put(Context.URL_PKG_PREFIXES, "org.jboss.ejb.client.naming");
+        env.put("org.jboss.ejb.client.scoped.context", "true");
+        env.put("endpoint.name", "client-endpoint");
+        env.put("remote.connections", "main");
+        env.put("remote.connection.main.protocol", "http-remoting");
+        env.put("remote.connection.main.host", HOST);
+        env.put("remote.connection.main.port", PORT);
+        env.put("remote.connection.main.connect.options.org.xnio.Options.SASL_POLICY_NOANONYMOUS", "false");
+        env.put("remote.connection.main.connect.options.org.xnio.Options.SSL_STARTTLS", "true");
+        env.put("remote.connection.main.connect.options.org.xnio.Options.SASL_POLICY_NOPLAINTEXT", "true");
+        env.put("remote.connection.main.connect.options.org.xnio.Options.SSL_ENABLED", "false");
+        env.put("remote.connection.main.username", SECURITY_USERNAME);
+        env.put("remote.connection.main.password", SECURITY_PASSWORD);
+        env.put("remote.connection.main.connect.options.org.xnio.Options.SASL_DISALLOWED_MECHANISMS", "JBOSS-LOCAL-USER");
+
+        String beanLookup = getEjbLookupString(earName, jarName, beanClass, remoteClass);
+		String lookupInfo = String.format("bean by lookup '%s' to '%s:%s' with credentials '%s/%s'",
+				beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
+
+		System.out.println("Looking at: " + lookupInfo);
+		return doLookup(beanLookup, remoteClass, env);
+	}
+
+	/**
+	 * <p>
+	 * Using the proprietary JBoss EJB Client API.<br>
 	 * See e.g. https://gist.github.com/jbandi/6287518
+	 * <p>
+	 * Probaly can't be used when running on server:<br>
+	 * <code>java.lang.SecurityException: EJBCLIENT000021: EJB client context selector may not be changed</code>
 	 */
 	public static final <T> T lookupProprietary(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
         final Properties ejbProperties = new Properties();
@@ -70,10 +101,41 @@ public final class EjbCallUtils {
         final EJBClientConfiguration ejbClientConfiguration = new PropertiesBasedEJBClientConfiguration(ejbProperties);
         final ConfigBasedEJBClientContextSelector selector = new ConfigBasedEJBClientContextSelector(ejbClientConfiguration);
         EJBClientContext.setSelector(selector);
-        EJBClientContext.getCurrent().registerInterceptor(0, new ClientInterceptor());
+        // EJBClientContext.getCurrent().registerInterceptor(0, new ClientInterceptor()); - probably if needed a home baked interceptor
 
-        final Context ejbContext = new InitialContext(ejbProperties);
-        final HelloWorld ejbHelloWorld = (HelloWorld) ejbContext.lookup("ejb:ejbremote-ear/ejbremote-ejb/HelloWorldBean!"+ HelloWorld.class.getName());
-        System.out.println(ejbHelloWorld.sayHello());
+        String beanLookup = getEjbLookupString(earName, jarName, beanClass, remoteClass);
+		String lookupInfo = String.format("bean by lookup '%s' to '%s:%s' with credentials '%s/%s'",
+				beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
+
+		System.out.println("Looking at: " + lookupInfo);
+		return doLookup(beanLookup, remoteClass, ejbProperties);
+	}
+
+	private static String getEjbLookupString(final String earName, final String jarName, final Class<?> beanClass, final Class<?> remoteClass) {
+		return "ejb:" + earName + "/" + jarName + "//" + beanClass.getSimpleName() + "!" + remoteClass.getName();
+	}
+	
+	private static String getRemoteNamingLookupString(final String earName, final String jarName, final Class<?> beanClass, final Class<?> remoteClass) {
+		// (isStateful ? "?stateful" : "");
+		return earName + "/" + jarName + "/" + beanClass.getSimpleName() + "!" + remoteClass.getName();
+	}
+
+	private static <T> T doLookup(final String beanLookupString, final Class<T> remoteClass, final Properties props) {
+		Context context = null;
+		try {
+			context = new InitialContext(props);
+			Thread.sleep(1 * 1000);
+			return remoteClass.cast(context.lookup(beanLookupString));
+		} catch (Exception e) {
+			throw new RuntimeException("Can't get: " + beanLookupString, e);
+		} finally {
+			if (context != null) {
+				try {
+					context.close();
+				} catch (Exception e) {
+					// ignore
+				}
+			}
+		}
 	}
 }

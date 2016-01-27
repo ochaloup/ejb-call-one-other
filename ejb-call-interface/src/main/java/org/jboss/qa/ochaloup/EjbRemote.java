@@ -4,5 +4,5 @@ import javax.ejb.Remote;
 
 @Remote
 public interface EjbRemote {
-	void callNext(boolean isCallNext);
+	void callNext();
 }

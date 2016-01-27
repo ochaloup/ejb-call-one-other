@@ -23,6 +23,6 @@ public class MyServlet extends HttpServlet {
         PrintWriter out = response.getWriter();
         out.print("<h4>Called " + EjbBean.class.getName()  + "</h4>");
         
-        bean.callNext(true);
+        bean.callNext();
     }
 }
