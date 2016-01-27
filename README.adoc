@@ -34,7 +34,7 @@ Run each of them with different settings (run on jdk8)
 
 Could be useful to decrease interval of orphan safety interval
  (see _ArjunaJTA/jta/classes/com/arjuna/ats/jta/common/JTAEnvironmentBean.java_,
-  default value for orphanSafetyInterval is 20000). Server settings shoul be
+  default value for orphanSafetyInterval is 20000). Server settings should be
  `-Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`
 
 
