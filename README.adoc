@@ -52,12 +52,6 @@ done
 . Then remove property `call.port` from `$JBOSS_HOME_3/standalone/configuration/standalone.xml`.
 . If you want set logging of `com.arjuna` to `TRACE`. Useful really for `$JBOSS_HOME_2`
 
-Run each of them with different settings (run on jdk8)
-
-* `./bin/standalone.sh -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=first`
-* `./bin/standalone.sh -Djboss.socket.binding.port-offset=100 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=second`
-* `./bin/standalone.sh -Djboss.socket.binding.port-offset=200 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=third`
-
 TIP: Could be useful to decrease interval of orphan safety interval
  (see _ArjunaJTA/jta/classes/com/arjuna/ats/jta/common/JTAEnvironmentBean.java_,
   default value for orphanSafetyInterval is 20000). Server settings should be
@@ -67,9 +61,10 @@ WARNING: For connection through outbound socket binding would be successful then
 it's needed to have defined `jboss.node.name` during startup.
 
 WARNING: If running with EAP 6.4 then you need to change value of parameter `protocol`
-from `http-remoting` to value `remote`.+
+from `http-remoting` to value `remote`. +
 Plus by default `remoting` subsystem is not available in _EAP 6.4.x_ configuration
 you will need to add it in version `1.2` (instead of `3.0` that it's in _EAP 7x_).
+
 
 == To deploy
 
@@ -120,5 +115,11 @@ ENDRULE
 ```
 
 == To run
+
+Run each of them with different settings (run on jdk8, at least for EAP7 :)
+
+* `./bin/standalone.sh -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=first`
+* `./bin/standalone.sh -Djboss.socket.binding.port-offset=100 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=second`
+* `./bin/standalone.sh -Djboss.socket.binding.port-offset=200 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=third`
 
 Got to: http://localhost:8080/ejb-call-war and check the servers log output.
