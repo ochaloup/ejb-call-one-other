@@ -21,6 +21,17 @@ public final class EjbCallUtils {
 	public static final String SECURITY_USERNAME = System.getProperty("call.username", "user");
 	public static final String SECURITY_PASSWORD = System.getProperty("call.password", "user");
 
+	public static final <T> T lookupEjbOutboundBinding(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
+        String beanLookup = getEjbLookupString(earName, jarName, beanClass, remoteClass);
+		String lookupInfo = String.format("bean by lookup '%s' (expecting outbound connection defined)",
+				beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
+
+		System.out.println("Looking at: " + lookupInfo);
+		final Properties props = new Properties();
+        props.put(Context.URL_PKG_PREFIXES, "org.jboss.ejb.client.naming");
+		return doLookup(beanLookup, remoteClass, props);
+	}
+
 	/**
 	 * <p>
 	 * Remote naming

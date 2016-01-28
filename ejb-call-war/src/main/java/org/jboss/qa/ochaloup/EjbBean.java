@@ -37,7 +37,7 @@ public class EjbBean implements EjbRemote {
 		}
 
 		if(EjbCallUtils.PORT != null) {
-			EjbRemote remoteBean = EjbCallUtils.lookupEjbClient(EjbCallUtils.PORT, "ejb-call-war-1.0.0-SNAPSHOT", EjbBean.class, EjbRemote.class);
+			EjbRemote remoteBean = EjbCallUtils.lookupEjbOutboundBinding(EjbCallUtils.PORT, "ejb-call-war-1.0.0-SNAPSHOT", EjbBean.class, EjbRemote.class);
 			remoteBean.callNext();
 		}
 
