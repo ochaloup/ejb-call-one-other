@@ -23,8 +23,7 @@ public final class EjbCallUtils {
 
 	public static final <T> T lookupEjbOutboundBinding(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {
         String beanLookup = getEjbLookupString(earName, jarName, beanClass, remoteClass);
-		String lookupInfo = String.format("bean by lookup '%s' (expecting outbound connection defined)",
-				beanLookup, HOST, PORT, SECURITY_USERNAME, SECURITY_PASSWORD);
+		String lookupInfo = String.format("bean by lookup '%s' (expecting outbound connection defined)", beanLookup);
 
 		System.out.println("Looking at: " + lookupInfo);
 		final Properties props = new Properties();
@@ -93,7 +92,7 @@ public final class EjbCallUtils {
 	 * Using the proprietary JBoss EJB Client API.<br>
 	 * See e.g. https://gist.github.com/jbandi/6287518
 	 * <p>
-	 * Probaly can't be used when running on server:<br>
+	 * Probably can't be used when running on server:<br>
 	 * <code>java.lang.SecurityException: EJBCLIENT000021: EJB client context selector may not be changed</code>
 	 */
 	public static final <T> T lookupProprietary(final String earName, final String jarName, final Class<?> beanClass, final Class<T> remoteClass) {

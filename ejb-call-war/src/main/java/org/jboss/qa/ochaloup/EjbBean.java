@@ -36,7 +36,9 @@ public class EjbBean implements EjbRemote {
 			throw new RuntimeException(e);
 		}
 
+		// for 3rd server the call will not be executed as port is not defined (was removed from system properties from standalone.xml)
 		if(EjbCallUtils.PORT != null) {
+		    // EjbCallUtils.PORT here represents name of ear file which is on the remote server
 			EjbRemote remoteBean = EjbCallUtils.lookupEjbOutboundBinding(EjbCallUtils.PORT, "ejb-call-war-1.0.0-SNAPSHOT", EjbBean.class, EjbRemote.class);
 			remoteBean.callNext();
 		}

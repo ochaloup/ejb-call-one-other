@@ -1,4 +1,11 @@
-= To install
+= WTF
+
+This is reproducer for issue https://issues.jboss.org/browse/JBTM-2575 a.k.a
+https://bugzilla.redhat.com/show_bug.cgi?id=1289386 where 3 servers are started
+and txn is propagated from one to another. Meanwhile one server crashes and recovery
+should put system to consistent state.
+
+== To install
 
 * `mvn install`
 
@@ -26,9 +33,17 @@ or
 Define EAP settings
 
 * adding application user for security connection
-* system property `call.port` which is used for knowing how behave
+** credentials are added with user _user_ and password _user_
+   password is hashed and could be generated: `echo -n 'user:ApplicationRealm:user' | md5sum`
+* system property (defined inside of _standalone.xml_) `call.port` which could be used
+  as information what is port where the call from a server will go to (see `org.jboss.qa.ochaloup.EjbCallUtils`)
 * transaction node identifier defined
 * outbound connection is needed
+** outbound connection points to other server (server1 -> server2, server2 -> server3)
+** The ejb interface is secured by default by `ApplicationRealm`. We've created
+   user _user_ with password _user_ and but the value has to be scrabbled with `base64`.
+   You can run `echo 'user' | base64`.
+
 
 ```
 for I in `seq 1 3`; do
@@ -44,27 +59,51 @@ for I in `seq 1 3`; do
     $JBOSS_HOME/standalone/configuration/standalone.xml
   sed -i "s#\(^.*<subsystem xmlns=\"urn:jboss:domain:remoting:.*\)#\1\n<outbound-connections>\n  <remote-outbound-connection name=\"remote-ejb-connection\" outbound-socket-binding-ref=\"binding-remote-ejb-connection\" username=\"user\" security-realm=\"PasswordRealm\" protocol=\"http-remoting\">\n    <properties>\n      <property name=\"SASL_POLICY_NOANONYMOUS\" value=\"false\"/>\n      <property name=\"SSL_ENABLED\" value=\"false\"/>\n    </properties>\n  </remote-outbound-connection>\n</outbound-connections>#"\
       $JBOSS_HOME/standalone/configuration/standalone.xml
-  sed -i "s#\(^.*</security-realms>\)#<security-realm name=\"PasswordRealm\">\n  <server-identities>\n    <secret value=\"dXNlcg==\"/>\n  </server-identities>\n</security-realm>\n\1#"\
+  sed -i "s#\(^.*</security-realms>\)#<security-realm name=\"PasswordRealm\">\n  <server-identities>\n    <secret value=\"dXNlcgo=\"/>\n  </server-identities>\n</security-realm>\n\1#"\
     $JBOSS_HOME/standalone/configuration/standalone.xml
 done
+unset JBOSS_HOME
 ```
 
-. Then remove property `call.port` from `$JBOSS_HOME_3/standalone/configuration/standalone.xml`.
-. If you want set logging of `com.arjuna` to `TRACE`. Useful really for `$JBOSS_HOME_2`
+* Remove property `call.port` from `$JBOSS_HOME_3/standalone/configuration/standalone.xml`.
+
+[WARNING]
+====
+If running with *EAP 6.4.x* then you need to remove parameter `protocol` from configuration of
+`remote-outbound-connection`. EAP 6.4 uses protocol `remote` and doesn't know other. That's reason why the
+option for configuration of the protocol is not available.
+
+Other very important thing is to *change port number* from _8080_ to _4447_.
+Remote ejb port number was changed to be multiplexed via http where undertow
+manages incoming request and that could be upgraded to different handling.
+
+This script could help you
+
+```
+for I in `seq 1 3`; do
+ JBOSS_HOME=`echo JBOSS_HOME_$I`
+ JBOSS_HOME=$( eval "echo \$$JBOSS_HOME" )
+ find $JBOSS_HOME -name standalone.xml -print0 | xargs -0 -I file sed -i 's/ protocol="http-remoting"//' file
+ find $JBOSS_HOME -name standalone.xml -print0 | xargs -0 -I file sed -i "s/\(remote-destination.*port=.\)8.80/\14$((4 + $I))47/" file
+done
+unset JBOSS_HOME
+```
+
+In case compare your _standalone.xml_ configuration with configuration of EAP
+under folder _examples_.
+====
+
+TIP: It could be helpful to set logging of _com.arjuna_ to _TRACE_.
+     It's especially useful for server `$JBOSS_HOME_2`.
 
 TIP: Could be useful to decrease interval of orphan safety interval
  (see _ArjunaJTA/jta/classes/com/arjuna/ats/jta/common/JTAEnvironmentBean.java_,
   default value for orphanSafetyInterval is 20000). Server settings should be
- `-Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`
+ `-Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`.
+ It's for faster reproducing the bug.
 
 WARNING: For connection through outbound socket binding would be successful then
-it's needed to have defined `jboss.node.name` during startup.
-
-WARNING: If running with EAP 6.4 then you need to remove parameter `protocol` from configuration of
-`remote-outbound-connection`. EAP 6.4 uses protocol `remote` and doesn't know other. That's reason why the
-option for configuration of the protocol is not available. +
-Plus by default `remoting` subsystem is not available in _EAP 6.4.x_ configuration
-you will need to add it in version `1.2` (instead of `3.0` that it's in _EAP 7x_).
+ it's needed to have defined `jboss.node.name` during startup.
 
 
 == To deploy
@@ -79,7 +118,7 @@ We will use byteman to instrument server crash. Add following to the end of the
 `$JBOSS_HOME_2/bin/standalone.conf` file.
 
 ```
-JAVA_OPTS="-javaagent:/opt/byteman-download-3.0.3/lib/byteman.jar=script:/home/ochaloup/tmp/byteman.btm -Djboss.modules.system.pkgs=org.jboss.byteman ${JAVA_OPTS}"
+JAVA_OPTS="-javaagent:/opt/byteman-download-3.0.5/lib/byteman.jar=script:/home/ochaloup/tmp/byteman.btm -Djboss.modules.system.pkgs=org.jboss.byteman ${JAVA_OPTS}"
 ```
 
 Now the byteman script is needed to be created at location `/home/ochaloup/tmp/byteman.btm`
@@ -119,8 +158,83 @@ ENDRULE
 
 Run each of them with different settings (run on jdk8, at least for EAP7 :)
 
-* `./bin/standalone.sh -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=first`
-* `./bin/standalone.sh -Djboss.socket.binding.port-offset=100 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=second`
-* `./bin/standalone.sh -Djboss.socket.binding.port-offset=200 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=45 -Djboss.node.name=third`
+* `./bin/standalone.sh -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=30 -Djboss.node.name=first -Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`
+* `./bin/standalone.sh -Djboss.socket.binding.port-offset=100 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=30 -Djboss.node.name=second -Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`
+* `./bin/standalone.sh -Djboss.socket.binding.port-offset=200 -Dcom.arjuna.ats.arjuna.recovery.periodicRecoveryPeriod=30 -Djboss.node.name=third -Dcom.arjuna.ats.jta.orphanSafetyInterval=3000`
 
 Got to: http://localhost:8080/ejb-call-war and check the servers log output.
+
+== How to read results
+
+This is not a reproducer which shows you big green sign - OK this works fine.
+You need to look at the server logs and checks manually how recovery process behaves.
+
+The test causes that second server is killed during commit phase. Txn was prepared
+and we expect that recovery ensures to be committed.
+
+When behaves wrongly (before fix) the third server arbitrarily decides to rollback
+all its resources.
+
+==== Correct behavior
+
+What should be seen (after fix)
+
+. http call is done
+. second server was killed
+. third server stays (even after several runs of recovery) with message
+```
+[stdout] (Periodic Recovery) getXAResources() instance: TestXAResourceRecovered(TestXAResourceCommon(id:980, xid:null, timeout:0, prepareReturn:0))
+[stdout] (Periodic Recovery) TestXAResourceRecovered.recover(i=16777216)[id=980]
+[stdout] (Periodic Recovery) recover()
+[stdout] (Periodic Recovery) returning 2 Xids
+[stdout] (Periodic Recovery) returning xid: < formatId=131077, gtrid_length=29, bqual_length=37, tx_uid=0:ffff7f000001:-469aa55c:5733a821:e, node_name=1, branch_uid=0:ffff7f000001:1e88ac69:5733a825:13, subordinatenodename=3, eis_name=java:/TestXAResource >
+[stdout] (Periodic Recovery) returning xid: < formatId=131077, gtrid_length=29, bqual_length=37, tx_uid=0:ffff7f000001:-469aa55c:5733a821:e, node_name=1, branch_uid=0:ffff7f000001:1e88ac69:5733a825:16, subordinatenodename=3, eis_name=java:/TestXAResource >
+[stdout] (Periodic Recovery) TestXAResourceCommon.isSameRM(xaResource=RecoveryOnlyEJBXAResource{receiverContext=EJBReceiverContext{clientContext=org.jboss.ejb.client.EJBClientContext@723ebd8f, receiver=org.jboss.as.ejb3.remote.LocalEjbReceiver@58a8869d}, transactionOriginNodeIdentifier='3'})[return 'false'][id=980]
+```
+. remove definition of byteman on the second server config
+ `$JBOSS_HOME/bin/standalone.conf` for next ejb call will proceed
+. start second server
+. go to `http://localhost:8080/ejb-call-war/` which activates cut connection
+  between servers (need to call next ejb is error of ejb remoting, see https://issues.jboss.org/browse/JBEAP-3314)
+. now recovery manager handles processing
+. good result is when all resources on all servers are committed
+. check logs for word 'rollback' - it should not be there. This issue causes that
+  third server after third recovery run is rolled back. Instead of seeing
+  `TestXAResourceRecovered.commit` you will see in log `$JBOSS_HOME_3/standalone/log/standalone.log`
+  two messages `TestXAResourceRecovered.rollback`
+
+==== Wrong behavior
+
+withouth the fix
+
+. http call is done
+. second server is killed
+. second server is started again
+. wait for 3 rounds of periodic recovery (on the third server, it takes about 2 minutes)
+. you can see that third server rollbacks
+.. correct behavior is that the third server should wait for being committed
+   and not rollbak itself
+
+[NOTE]
+====
+Exception in warning below means that first server (which is leading of the transaction processing)
+can't connect to second server and commit transaction. This is ok when second server is down.
+But when it's up again you can still see this exception. That's because of https://issues.jboss.org/browse/JBEAP-3314.
+EJB remote outbound connection is activated after the second server crashes automatically
+but there has to be done a call from one server to another. After that recovery will process
+and the warning disappear.
+
+```
+WARN  [com.arjuna.ats.jta] (Periodic Recovery) ARJUNA016036: commit on < formatId=131077, gtrid_length=29, bqual_length=36, tx_uid=0:ffff7f000001:-394b6816:5733fcb6:15, node_name=1, branch_uid=0:ffff7f000001:-394b6816:5733fcb6:20, subordinatenodename=null, eis_name=unknown eis name > (RecoveryOnlySerializedEJBXAResource{ejbReceiverNodeName='second'}) failed with exception $XAException.XA_RETRY: javax.transaction.xa.XAException
+ at org.jboss.ejb.client.RecoveryOnlySerializedEJBXAResource.commit(RecoveryOnlySerializedEJBXAResource.java:51)
+ at com.arjuna.ats.internal.jta.resources.arjunacore.XAResourceRecord.topLevelCommit(XAResourceRecord.java:464) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.arjuna.coordinator.BasicAction.doCommit(BasicAction.java:2754) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.arjuna.coordinator.BasicAction.doCommit(BasicAction.java:2670) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.arjuna.coordinator.BasicAction.phase2Commit(BasicAction.java:1828) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.arjuna.recovery.RecoverAtomicAction.replayPhase2(RecoverAtomicAction.java:71) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.internal.arjuna.recovery.AtomicActionRecoveryModule.doRecoverTransaction(AtomicActionRecoveryModule.java:152) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.internal.arjuna.recovery.AtomicActionRecoveryModule.processTransactionsStatus(AtomicActionRecoveryModule.java:251) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.internal.arjuna.recovery.AtomicActionRecoveryModule.periodicWorkSecondPass(AtomicActionRecoveryModule.java:109) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.internal.arjuna.recovery.PeriodicRecovery.doWorkInternal(PeriodicRecovery.java:793) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+ at com.arjuna.ats.internal.arjuna.recovery.PeriodicRecovery.run(PeriodicRecovery.java:375) [jbossjts-jacorb-4.17.30.Final-redhat-1.jar:4.17.30.Final-redhat-1]
+```
